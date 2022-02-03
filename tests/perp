@@ -1,0 +1,2 @@
+#!/bin/sh
+xclip -o | tr 'TF' '10' > erpelstolz

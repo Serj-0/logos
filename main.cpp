@@ -11,8 +11,16 @@
 #define ARG_DO(N) inline void N(int argc, char** args, int& i)
 
 #define ATOMIC_RANK 99
-
 using namespace std;
+
+void usage(){
+	cout << "logos [OPTIONS] [PREMISES]\n"
+		"\t-h\tPrint this message\n"
+		"\t-p\tPrint premises with logical symbols instead of '&|=' etc.\n"
+		"\t-l\tRepresent given premises as atomic in table\n"
+		"\t-d \"$\"\tSet delimiter of table\n";
+	exit(0);
+}
 
 struct node{
     bool (*operation)(bool, bool);
@@ -254,9 +262,9 @@ node* parse(string premise){
             if(atomOpr){
                 if(subnode->parent){
                     node** place;
-                    if(subnode = subnode->parent->left){
+                    if(subnode == subnode->parent->left){
                         place = &subnode->parent->left;
-                    }else if(subnode = subnode->parent->left){
+                    }else if(subnode == subnode->parent->left){
                         place = &subnode->parent->right;
                     }
                     
@@ -309,8 +317,13 @@ struct{
     string delim = " | ";
 }ARGUMENTS;
 
+ARG_DO(_arg_help) {
+	usage();
+}
+
 ARG_DO(_arg_pretty) { ARGUMENTS.pretty = 1; }
 ARG_DO(_arg_list)   { ARGUMENTS.list = 1; }
+
 ARG_DO(_arg_delim)  {
     if(i >= argc - 1) reterrn("Too few arguments! -d flag requires one argument!", RETURN_FEW_ARGS, "");
     ARGUMENTS.delim = string(args[++i]);
@@ -319,18 +332,19 @@ ARG_DO(_arg_delim)  {
 /*** MAIN ***/
 //TODO maybe make the formatting a bit nicer
 //TODO add arguments -M[macro] --assert[premise] --assert-not[premise]
-//TODO usage text function
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
     
     //handle arguments
     map<string, void(*)(int, char**, int&)> argStrs = {
+		{"-h", _arg_help},
+		{"--help", _arg_help},
         {"-p", _arg_pretty},
         {"--pretty", _arg_pretty},
         {"-l", _arg_list},
         {"-d", _arg_delim}
     };
-    
+
     vector<string> premises;
     for(int i = 1; i < argc; i++){
         string arg(args[i]);

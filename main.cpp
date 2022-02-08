@@ -71,6 +71,15 @@ map<string, opr_info> prettyOperators = {
     {"EQUALS", {EQUIVALENCE, CH_EQUIVALENCE}}
 };
 
+map<LOGIC_FUNC_PTR(), string> unprettyOperators = {
+	{EMPTY, "X"},
+	{NOT, "!"},
+	{AND, "&"},
+	{OR, "|"},
+	{IMPLICATION, "->"},
+	{EQUIVALENCE, "<->"}
+};
+
 /******************/
 
 node __EMPTY_NODE = {EMPTY, -1};
@@ -112,24 +121,44 @@ inline void printAtoms(uint64_t input, string delim){
     }
 }
 
-inline uint64_t bitMaskOf(char c){
-    return 1 << ATOMS[c];
+inline uint64_t bitMaskOf(char atom){
+    return 1 << ATOMS[atom];
+}
+
+inline bool atomState(uint64_t atomTable, char atom){
+	return atomTable & bitMaskOf(atom);
 }
 
 /**
  *  must be used after all premises have been parsed into trees
  */
 void generateTable(node* premise, bool* table){
+	/**
+	 * inp is a bitmap of all atomic premises where
+	 * when a is true
+	 * 		b is true
+	 * 		c is false
+	 * 		d is true
+	 * 	inp is
+	 * 		1101
+	 *		^^ ^
+	 *		abcd
+	 *
+	 *	it is also the index of the truth table
+	 */
     uint64_t inp = outcomeCount();
     
+	//to store values of atoms to pass to evaluate function
     bool atoms[ATOM_COUNT];
     do{
+		//test each atom
         uint64_t head = 1 << (ATOM_COUNT - 1);
         for(int i = 0; i < ATOM_COUNT; i++){
             atoms[i] = inp & head;
             head >>= 1;
         }
         
+		//save truth state of premise
         table[inp] = evaluate(premise, atoms);
     }while(inp--);
 }
@@ -146,6 +175,24 @@ bool matchOpr(LOGIC_FUNC_PTR(*trg), string& premise, int* i){
     if(i) *i = kool - 1;
     if(trg) *trg = prettyOperators[opr].func;
     return true;
+}
+
+void printNodeTree(node* n, int t = 0, bool r = true){
+	if(!n || n->operation == EMPTY) return;
+
+	cout << string(r ? 0 : t, '\t') << unprettyOperators[n->operation] << "[" << n->atom << "]\t";
+
+	printNodeTree(n->right, t+1);
+	cout << '\n';
+	printNodeTree(n->left, t, false);
+}
+
+void clearNode(node* n){
+	n->atom = -1;
+	n->left = nullptr;
+	n->right = nullptr;
+	n->operation = nullptr;
+	n->parent = nullptr;
 }
 
 /********************* PARSE ************************************************************************************************************/
@@ -166,17 +213,19 @@ node* parse(string premise){
         if(c == ' ') continue;
         
         if(c >= 'a' && c <= 'z'){
-            if(pp == 0) reterrn("Ungrammatical! Multiple atomic premises with no connective!", RETURN_BAD_PREMISE, premise, i);
+            if(pp == 0) reterrn("Ungrammatical! Multiple premises with no connective!", RETURN_BAD_PREMISE, premise, i);
             pp = 0;
             
+//			cout << "encountered atom " << c << "\n";
             if(!ATOMS.count(c)){
+//				cout << "SET to " << ATOM_COUNT << '\n';
                 ATOMS[c] = ATOM_COUNT++;
                 ATOM_BY_IND.push_back(c);
+//				cout << ATOM_BY_IND.size() << '\n';
             }
             
-            node* subnode;
-            
-            subnode = new node;
+            node* subnode = new node;
+			clearNode(subnode);
             subnode->operation = ATOM;
             subnode->atom = ATOMS[c];
             
@@ -189,8 +238,9 @@ node* parse(string premise){
             
             atomStack.push_back(subnode);
         }else if(c == '('){
-            node* subnode = nullptr;
-            
+            if(pp == 0) reterrn("Ungrammatical! Multiple premises with no connective!", RETURN_BAD_PREMISE, premise, i);
+			pp = 0;
+
             int pst = 1, j = i + 1;
             while(pst && j < premise.size()){
                 if(premise[j] == ')') pst--;
@@ -198,16 +248,23 @@ node* parse(string premise){
                 j++;
             }
 
-            subnode = parse(premise.substr(i + 1, j - i - 2));
+            node* subnode = parse(premise.substr(i + 1, j - i - 2));
+
+			if(atomOpr){
+                atomOpr->left = subnode;
+                subnode = atomOpr;
+                while(subnode->parent) subnode = subnode->parent;
+                atomOpr = nullptr;
+            }
+
             atomStack.push_back(subnode);
 
-            pp = -1;
             i = j - 1;
         }else{
             node* subnode = new node;
-            subnode->atom = -1;
-            subnode->parent = nullptr;
+			clearNode(subnode);
             
+            //match operator string to logic func pointer and set subnode operation to that
             if(!matchOpr(&subnode->operation, premise, &i)) reterrn("Invalid operator!", RETURN_BAD_PREMISE, premise, i);
             
             //if atomic rank, therefor single argument
@@ -226,8 +283,7 @@ node* parse(string premise){
                 continue;
             }
             
-            //match operator string to logic func pointer and set subnode operation to that
-            if(pp == 1) reterrn("Ungrammatical! Multiple connectives with no premises!", RETURN_BAD_PREMISE, premise, i);
+            if(pp == 1) reterrn("Ungrammatical! Connectives with no premise!", RETURN_BAD_PREMISE, premise, i);
             pp = 1;
             
             oprStack.push_back(subnode);
@@ -283,6 +339,8 @@ node* parse(string premise){
         }
     }
     
+	if(pp) reterrn("Ungrammatical! Missing premise!", RETURN_BAD_PREMISE, premise, premise.size());
+
     //populate operations with atoms
     if(!point){
         point = *atomStack.rbegin();
@@ -307,14 +365,26 @@ node* parse(string premise){
     
     //traverse up to master node
     while(point->parent) point = point->parent;
+
+//	cout << "PARSED: " << premise << '\n';
+//	printNodeTree(point);
+//	cout << "\n\n";
+
     return point;
 }
 
 /*** ARGUMENTS ***/
+
+void argCountCheck(int argc, char** args, int i){
+	if(i >= argc - 1) reterrn("Too few arguments! Missing argument for " + string(args[i]), RETURN_FEW_ARGS, "");
+}
+
 struct{
     bool pretty = 0;
     bool list = 0;
     string delim = " | ";
+	vector<string> assertPremises;
+	vector<bool*> assertTables;
 }ARGUMENTS;
 
 ARG_DO(_arg_help) {
@@ -325,13 +395,19 @@ ARG_DO(_arg_pretty) { ARGUMENTS.pretty = 1; }
 ARG_DO(_arg_list)   { ARGUMENTS.list = 1; }
 
 ARG_DO(_arg_delim)  {
-    if(i >= argc - 1) reterrn("Too few arguments! -d flag requires one argument!", RETURN_FEW_ARGS, "");
+	argCountCheck(argc, args, i);
     ARGUMENTS.delim = string(args[++i]);
+}
+
+ARG_DO(_arg_assert) {
+	argCountCheck(argc, args, i);
+	ARGUMENTS.assertPremises.push_back(string(args[++i]));
 }
 
 /*** MAIN ***/
 //TODO maybe make the formatting a bit nicer
-//TODO add arguments -M[macro] --assert[premise] --assert-not[premise]
+//TODO add arguments -M[macro] 
+//TODO --assert-not[premise]
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
     
@@ -342,7 +418,9 @@ int main(int argc, char** args){
         {"-p", _arg_pretty},
         {"--pretty", _arg_pretty},
         {"-l", _arg_list},
-        {"-d", _arg_delim}
+        {"-d", _arg_delim},
+		{"-A", _arg_assert},
+		{"--assert", _arg_assert},
     };
 
     vector<string> premises;
@@ -361,17 +439,29 @@ int main(int argc, char** args){
     
     //parse premises
     vector<node*> parsed;
-    for(int i = 0; i < premises.size(); i++){
-        parsed.push_back(parse(premises[i]));
-    }
-    
+	for(string premise : premises){
+		parsed.push_back(parse(premise));
+	}
+
+	vector<node*> asserts;
+	for(string premise : ARGUMENTS.assertPremises){
+		asserts.push_back(parse(premise));
+	}
+
+	//generate tables
     vector<bool*> tables;
-    
-    for(int i = 0; i < parsed.size(); i++){
+	for(node* n : parsed){
         bool* ntable = new bool[outcomeCount()];
         tables.push_back(ntable);
         
-        generateTable(parsed[i], ntable);
+        generateTable(n, ntable);
+    }
+
+	for(node* n : asserts){
+        bool* ntable = new bool[outcomeCount()];
+        ARGUMENTS.assertTables.push_back(ntable);
+        
+        generateTable(n, ntable);
     }
     
     //print table
@@ -420,16 +510,26 @@ int main(int argc, char** args){
     }
     cout << '\n';
     
-    uint64_t i = outcomeCount() - 1;
+    uint64_t inp = outcomeCount() - 1;
     do{
-        printAtoms(i, d);
+		bool r = false;
+		for(bool* assTable : ARGUMENTS.assertTables){
+//			cout << assTable[inp] << '\n';
+			if(!assTable[inp]){
+				r = true;
+				break;
+			}
+		}
+		if(r) continue;
+
+        printAtoms(inp, d);
         
-        cout << tables[0][i];
+        cout << tables[0][inp];
         for(int j = 1; j < tables.size(); j++){
-            cout << d << tables[j][i];
+            cout << d << tables[j][inp];
         }
         cout << "\n";
-    }while(i--);
+    }while(inp--);
     
     return RETURN_SUCCESS;
 }

@@ -1,3 +1,4 @@
+//TODO add more premise tests
 #include <iostream>
 #include <map>
 #include <vector>
@@ -248,6 +249,8 @@ node* parse(string premise){
                 j++;
             }
 
+			if(pst) reterrn("Ungrammatical! Unclosed paren!", RETURN_BAD_PREMISE, premise, i);
+
             node* subnode = parse(premise.substr(i + 1, j - i - 2));
 
 			if(atomOpr){
@@ -402,6 +405,11 @@ ARG_DO(_arg_delim)  {
 ARG_DO(_arg_assert) {
 	argCountCheck(argc, args, i);
 	ARGUMENTS.assertPremises.push_back(string(args[++i]));
+}
+
+ARG_DO(_arg_assert_not) {
+	argCountCheck(argc, args, i);
+	ARGUMENTS.assertPremises.push_back("!(" + string(args[++i]) + ")");
 }
 
 /*** MAIN ***/

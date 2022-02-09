@@ -1,7 +1,9 @@
 #!/bin/sh
-while read PREMISE TABLE
+while IFS=$'\n' read TEST
 do
-	OUT=$(../logos -d '' "$PREMISE" | sed 1d | tr -d '\n')
+	TABLE=$(rev <<< "$TEST" | cut -d' ' -f1 | rev)
+	PREMISE=$(sed "s/$TABLE//" <<< "$TEST")
+	OUT=$(sh -c "../logos -d '' $PREMISE" | sed 1d | tr -d '\n')
 	[ "$OUT" = "$TABLE" ] && MCH="SUCCESS" || MCH=$"FAILURE\nEXPECTED: $TABLE\nRESULT:   $OUT"
 	[ "$1" = "-v" ] &&\
 		echo -e "$PREMISE\n$TABLE\n$OUT\n$(head -1 <<< $MCH)\n" ||\

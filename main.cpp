@@ -16,10 +16,13 @@ using namespace std;
 
 void usage(){
 	cout << "logos [OPTIONS] [PREMISES]\n"
-		"\t-h\tPrint this message\n"
-		"\t-p\tPrint premises with logical symbols instead of '&|=' etc.\n"
+		"\t--help\n\t-h\tPrint this message\n"
+		"\t-p\tPrint premises with special symbols '¬ ⋂ ⋃ → ⟷' instead of '! & | -> <->'\n"
 		"\t-l\tRepresent given premises as atomic in table\n"
-		"\t-d \"$\"\tSet delimiter of table\n";
+		"\t-d [d]\tSet delimiter of table\n"
+		"\t--assert\n\t-A [p]\tRemove rows from table, where the assertion is not true\n"
+		"\t--assert-not\n\t-N [p]\tSame as --assert [!p]\n"
+		;
 	exit(0);
 }
 
@@ -415,7 +418,6 @@ ARG_DO(_arg_assert_not) {
 /*** MAIN ***/
 //TODO maybe make the formatting a bit nicer
 //TODO add arguments -M[macro] 
-//TODO --assert-not[premise]
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
     
@@ -424,11 +426,12 @@ int main(int argc, char** args){
 		{"-h", _arg_help},
 		{"--help", _arg_help},
         {"-p", _arg_pretty},
-        {"--pretty", _arg_pretty},
         {"-l", _arg_list},
         {"-d", _arg_delim},
 		{"-A", _arg_assert},
 		{"--assert", _arg_assert},
+		{"-N", _arg_assert_not},
+		{"--assert-not", _arg_assert_not}
     };
 
     vector<string> premises;

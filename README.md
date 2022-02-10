@@ -19,7 +19,7 @@ Connectives are formatted as follows
 |IMPLICATION|->|
 |EQUIVALENCE|<-> or =|
 
-Although it's not conventionally grammatical, negation of a connective is allowed and produces the same result as negation of the whole premise [example](####Negation example)
+Although it's not conventionally grammatical, negation of a connective is allowed and produces the same result as negation of the whole premise [example](####negation-example)
 ## Examples
 
 ```

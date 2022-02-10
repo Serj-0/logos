@@ -2,6 +2,7 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <chrono>
 
 #define RETURN_SUCCESS 0
 #define RETURN_BAD_PREMISE 1
@@ -12,7 +13,18 @@
 #define ARG_DO(N) inline void N(int argc, char** args, int& i)
 
 #define ATOMIC_RANK 99
+
+#ifdef DO_TIMERS
+#define TIMER_START(N) auto N = high_resolution_clock::now()
+#define TIMER_END(N, LABEL) cout << LABEL << " took " << (duration<float, std::milli>(high_resolution_clock::now() - N).count()) << "ms\n";
+#else
+#define TIMER_START(N)
+#define TIMER_END(N, LABEL)
+#endif
+
 using namespace std;
+using chrono::high_resolution_clock;
+using chrono::duration;
 
 void usage(){
 	cout << "logos [OPTIONS] [PREMISES]\n"
@@ -136,7 +148,7 @@ inline bool atomState(uint64_t atomTable, char atom){
 /**
  *  must be used after all premises have been parsed into trees
  */
-void generateTable(node* premise, bool* table){
+void generateTables(vector<node*> premises, vector<node*> asserts, vector<bool*>& tables, vector<bool*>& assertTables){
 	/**
 	 * inp is a bitmap of all atomic premises where
 	 * when a is true
@@ -153,17 +165,23 @@ void generateTable(node* premise, bool* table){
     uint64_t inp = outcomeCount();
     
 	//to store values of atoms to pass to evaluate function
-    bool atoms[ATOM_COUNT];
+    bool inpAtoms[ATOM_COUNT];
     do{
 		//test each atom
         uint64_t head = 1 << (ATOM_COUNT - 1);
         for(int i = 0; i < ATOM_COUNT; i++){
-            atoms[i] = inp & head;
+            inpAtoms[i] = inp & head;
             head >>= 1;
         }
         
-		//save truth state of premise
-        table[inp] = evaluate(premise, atoms);
+		//save truth state of premises
+		for(int boof = 0; boof < premises.size(); boof++){
+			tables[boof][inp] = evaluate(premises[boof], inpAtoms);
+		}
+
+		for(int boof = 0; boof < asserts.size(); boof++){
+			assertTables[boof][inp] = evaluate(asserts[boof], inpAtoms);
+		}
     }while(inp--);
 }
 
@@ -390,7 +408,6 @@ struct{
     bool list = 0;
     string delim = " | ";
 	vector<string> assertPremises;
-	vector<bool*> assertTables;
 }ARGUMENTS;
 
 ARG_DO(_arg_help) {
@@ -420,8 +437,9 @@ ARG_DO(_arg_assert_not) {
 //TODO add arguments -M[macro] 
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
-    
+	
     //handle arguments
+	TIMER_START(argtime);
     map<string, void(*)(int, char**, int&)> argStrs = {
 		{"-h", _arg_help},
 		{"--help", _arg_help},
@@ -445,10 +463,12 @@ int main(int argc, char** args){
             premises.push_back(arg);
         }
     }
+	TIMER_END(argtime, "Argument handling");
     
     if(!premises.size()) reterrn("Too few arguments! Must give at least one premise!", RETURN_FEW_ARGS, "");
     
     //parse premises
+	TIMER_START(parsetime);
     vector<node*> parsed;
 	for(string premise : premises){
 		parsed.push_back(parse(premise));
@@ -458,25 +478,28 @@ int main(int argc, char** args){
 	for(string premise : ARGUMENTS.assertPremises){
 		asserts.push_back(parse(premise));
 	}
+	TIMER_END(parsetime, "Parsing");
 
 	//generate tables
+	TIMER_START(gentime);
     vector<bool*> tables;
+	vector<bool*> assertTables;
 	for(node* n : parsed){
         bool* ntable = new bool[outcomeCount()];
         tables.push_back(ntable);
-        
-        generateTable(n, ntable);
     }
 
 	for(node* n : asserts){
         bool* ntable = new bool[outcomeCount()];
-        ARGUMENTS.assertTables.push_back(ntable);
-        
-        generateTable(n, ntable);
+        assertTables.push_back(ntable);
     }
+
+	generateTables(parsed, asserts, tables, assertTables);
+	TIMER_END(gentime, "Table generation");
     
     //print table
     if(ARGUMENTS.pretty){
+		TIMER_START(pretyime);
         for(string& str : premises){
             //remove spaces;
             for(auto it = str.begin(); it < str.end();){
@@ -495,9 +518,11 @@ int main(int argc, char** args){
                 }
             }
         }
+		TIMER_END(pretyime, "Prettification");
     }
     
     if(ARGUMENTS.list){
+		TIMER_START(listime);
         char c = 'p';
         
         for(string& str : premises){
@@ -505,10 +530,12 @@ int main(int argc, char** args){
             str = string(1, c);
             c++;
         }
+		TIMER_END(listime, "Listing");
     }
     
     string& d = ARGUMENTS.delim;
     
+	TIMER_START(printime);
     cout << ATOM_BY_IND[0];
     for(int i = 1; i < ATOM_COUNT; i++){
         cout << d << ATOM_BY_IND[i];
@@ -524,7 +551,7 @@ int main(int argc, char** args){
     uint64_t inp = outcomeCount() - 1;
     do{
 		bool r = false;
-		for(bool* assTable : ARGUMENTS.assertTables){
+		for(bool* assTable : assertTables){
 //			cout << assTable[inp] << '\n';
 			if(!assTable[inp]){
 				r = true;
@@ -541,6 +568,7 @@ int main(int argc, char** args){
         }
         cout << "\n";
     }while(inp--);
+	TIMER_END(printime, "Printing");
     
     return RETURN_SUCCESS;
 }

@@ -28,12 +28,13 @@ using chrono::duration;
 
 void usage(){
 	cout << "logos [OPTIONS] [PREMISES]\n"
-		"\t--help\n\t-h\tPrint this message\n"
-		"\t-p\tPrint premises with special symbols '¬ ⋂ ⋃ → ⟷' instead of '! & | -> <->'\n"
-		"\t-l\tRepresent given premises as atomic in table\n"
-		"\t-d [d]\tSet delimiter of table\n"
-		"\t--assert\n\t-A [p]\tRemove rows from table, where the assertion is not true\n"
-		"\t--assert-not\n\t-N [p]\tSame as --assert [!p]\n"
+		"\t--help\n\t-h\t\tPrint this message\n"
+		"\t-p\t\tPrint premises with special symbols '¬ ⋂ ⋃ → ⟷' instead of '! & | -> <->'\n"
+		"\t-l\t\tRepresent given premises as atomic in table\n"
+		"\t-d [d]\t\tSet delimiter of table\n"
+		"\t--assert\n\t-A [p]\t\tRemove rows from table, where the assertion is not true\n"
+		"\t--assert-not\n\t-N [p]\t\tSame as --assert [!p]\n"
+		"\t--macro\n\t-M [str=val]\tReplace 'str' with 'val' in given premises\n"
 		;
 	exit(0);
 }
@@ -116,8 +117,8 @@ bool evaluate(node* n, bool* atoms){
     }
 }
 
-void reterrn(string msg, int r, string premise, int place = -1){
-    cerr << msg << "\n";
+void reterrn(string msg, int r, string premise = "", int place = -1){
+    cerr << "[LOGOS] ERROR: " << msg << "\n";
     if(place > -1){
         cerr << '\t'
              << string(place, ' ') << "*\n\t"
@@ -227,7 +228,7 @@ node* parse(string premise){
     
     node* atomOpr = nullptr;
     
-    int pp = -1;
+    int pp = 1;
     
     //translate text to operation tree
     for(int i = 0; i < premise.size(); i++){
@@ -238,12 +239,9 @@ node* parse(string premise){
             if(pp == 0) reterrn("Ungrammatical! Multiple premises with no connective!", RETURN_BAD_PREMISE, premise, i);
             pp = 0;
             
-//			cout << "encountered atom " << c << "\n";
             if(!ATOMS.count(c)){
-//				cout << "SET to " << ATOM_COUNT << '\n';
                 ATOMS[c] = ATOM_COUNT++;
                 ATOM_BY_IND.push_back(c);
-//				cout << ATOM_BY_IND.size() << '\n';
             }
             
             node* subnode = new node;
@@ -411,43 +409,43 @@ struct{
 	map<string, string> macros;
 }ARGUMENTS;
 
-ARG_DO(_arg_help) {
+ARG_DO(_arg_help){
 	usage();
 }
 
 ARG_DO(_arg_pretty) { ARGUMENTS.pretty = 1; }
 ARG_DO(_arg_list)   { ARGUMENTS.list = 1; }
 
-ARG_DO(_arg_delim)  {
+ARG_DO(_arg_delim){
 	argCountCheck(argc, args, i);
     ARGUMENTS.delim = string(args[++i]);
 }
 
-ARG_DO(_arg_assert) {
+ARG_DO(_arg_assert){
 	argCountCheck(argc, args, i);
 	ARGUMENTS.assertPremises.push_back(string(args[++i]));
 }
 
-ARG_DO(_arg_assert_not) {
+ARG_DO(_arg_assert_not){
 	argCountCheck(argc, args, i);
 	ARGUMENTS.assertPremises.push_back("!(" + string(args[++i]) + ")");
 }
 
-//FIXME check for empty macro
-ARG_DO(_arg_macro) {
+ARG_DO(_arg_macro){
 	argCountCheck(argc, args, i);
 	string mcr = args[++i];
-	
+
 	int eqat = mcr.find_first_of('=');
 	string key = mcr.substr(0, eqat);
 	string value = mcr.substr(eqat + 1);
+
+	if(!key.size() || !value.size()) reterrn("Bad macro! " + mcr, RETURN_FEW_ARGS);
 
 	ARGUMENTS.macros[key] = value;
 }
 
 /*** MAIN ***/
 //TODO maybe make the formatting a bit nicer
-//TODO add arguments -M p=[macro] 
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
 	
@@ -491,11 +489,13 @@ int main(int argc, char** args){
 		for(string& prop : premises){
 			int mc = 0;
 			while(mc < prop.size()){
-				while(prop[mc] != key[0]) mc++;
+				while(mc < prop.size() && prop[mc] != key[0]) mc++;
 
 				if(key == prop.substr(mc, ksz)){
 					prop.replace(mc, ksz, value);
 					mc += ksz;
+				}else{
+					mc++;
 				}
 			}
 		}

@@ -408,6 +408,7 @@ struct{
     bool list = 0;
     string delim = " | ";
 	vector<string> assertPremises;
+	map<string, string> macros;
 }ARGUMENTS;
 
 ARG_DO(_arg_help) {
@@ -432,9 +433,21 @@ ARG_DO(_arg_assert_not) {
 	ARGUMENTS.assertPremises.push_back("!(" + string(args[++i]) + ")");
 }
 
+//FIXME check for empty macro
+ARG_DO(_arg_macro) {
+	argCountCheck(argc, args, i);
+	string mcr = args[++i];
+	
+	int eqat = mcr.find_first_of('=');
+	string key = mcr.substr(0, eqat);
+	string value = mcr.substr(eqat + 1);
+
+	ARGUMENTS.macros[key] = value;
+}
+
 /*** MAIN ***/
 //TODO maybe make the formatting a bit nicer
-//TODO add arguments -M[macro] 
+//TODO add arguments -M p=[macro] 
 int main(int argc, char** args){
     if(argc < 2) reterrn("Too few arguments!", RETURN_FEW_ARGS, "");
 	
@@ -449,7 +462,9 @@ int main(int argc, char** args){
 		{"-A", _arg_assert},
 		{"--assert", _arg_assert},
 		{"-N", _arg_assert_not},
-		{"--assert-not", _arg_assert_not}
+		{"--assert-not", _arg_assert_not},
+		{"-M", _arg_macro},
+		{"--macro", _arg_macro}
     };
 
     vector<string> premises;
@@ -467,6 +482,25 @@ int main(int argc, char** args){
     
     if(!premises.size()) reterrn("Too few arguments! Must give at least one premise!", RETURN_FEW_ARGS, "");
     
+	//expand macros
+	for(auto mac : ARGUMENTS.macros){
+		const string& key = mac.first;
+		string& value = mac.second;
+
+		int ksz = key.size();
+		for(string& prop : premises){
+			int mc = 0;
+			while(mc < prop.size()){
+				while(prop[mc] != key[0]) mc++;
+
+				if(key == prop.substr(mc, ksz)){
+					prop.replace(mc, ksz, value);
+					mc += ksz;
+				}
+			}
+		}
+	}
+
     //parse premises
 	TIMER_START(parsetime);
     vector<node*> parsed;
@@ -523,9 +557,11 @@ int main(int argc, char** args){
     
     if(ARGUMENTS.list){
 		TIMER_START(listime);
-        char c = 'p';
+        char c = 'a';
         
         for(string& str : premises){
+			while(ATOMS.count(c)) c++;
+
             cout << c << " = " << str << '\n';
             str = string(1, c);
             c++;
@@ -569,6 +605,6 @@ int main(int argc, char** args){
         cout << "\n";
     }while(inp--);
 	TIMER_END(printime, "Printing");
-    
+
     return RETURN_SUCCESS;
 }
